@@ -1,4 +1,4 @@
-{ stdenv }: let
+{stdenv}: let
   # Prebuilt binaries extracted from FriendlyELEC images
   uboot_img = ./linux-u-boot-legacy-cm3588/uboot.img;
   idbloader_img = ./linux-u-boot-legacy-cm3588/idbloader.img;

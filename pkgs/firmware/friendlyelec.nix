@@ -1,4 +1,10 @@
-{ fetchFromGitHub, stdenvNoCC, lib, ... }: stdenvNoCC.mkDerivation {
+{
+  fetchFromGitHub,
+  stdenvNoCC,
+  lib,
+  ...
+}:
+stdenvNoCC.mkDerivation {
   pname = "friendlyelec-firmware";
   version = "2024.02.08";
 
@@ -24,7 +30,7 @@
 
   meta = {
     description = "Firmware files for FriendlyElec CM3588 NAS (RK3588)";
-    platforms = [ "aarch64-linux" ];
+    platforms = ["aarch64-linux"];
     license = lib.licenses.unfreeRedistributableFirmware;
   };
 }
