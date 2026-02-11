@@ -11,7 +11,6 @@
 }: let
   username = "nixos"; # CHANGE ME
   sshKeys = [
-    
     # CHANGE ME
   ];
 in {

@@ -9,7 +9,20 @@
     self,
     nixpkgs,
   }: {
-    # 1. Native Configuration (For use ON the CM3588)
+    # 1) Export a reusable NixOS module for the board
+    nixosModules = {
+      cm3588 = {
+        pkgs,
+        lib,
+        ...
+      }: {
+        imports = [
+          ./modules/hardware/board.nix
+          ./modules/hardware/kernel.nix
+        ];
+      };
+    };
+    # Native Configuration (For use ON the CM3588)
     nixosConfigurations.cm3588 = nixpkgs.lib.nixosSystem {
       system = "aarch64-linux";
       modules = [
