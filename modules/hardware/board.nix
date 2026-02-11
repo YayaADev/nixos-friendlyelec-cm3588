@@ -53,7 +53,8 @@
   };
 
   hardware = {
-    deviceTree.name = "rockchip/rk3588-nanopi6-rev01.dtb";
+    # https://github.com/friendlyarm/kernel-rockchip/blob/524e3e035d50fcc8a623cf8e487cfb35d7272ffa/arch/arm64/boot/dts/rockchip/rk3588-nanopi6-rev09.dts#L14
+    deviceTree.name = "rockchip/rk3588-nanopi6-rev09.dtb";
     firmware = [
       (pkgs.callPackage ../../pkgs/firmware/friendlyelec.nix {})
       (pkgs.callPackage ../../pkgs/firmware/mali.nix {})
