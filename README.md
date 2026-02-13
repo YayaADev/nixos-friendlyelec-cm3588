@@ -1,54 +1,88 @@
 # nixos-friendlyelec-cm3588
 
-NixOS image builder for **FriendlyElec CM3588 / NanoPi 6 (RK3588)** boards.
+NixOS image builder for the **FriendlyElec CM3588 NAS (RK3588)**.
 
-This repository provides a  way to build **bootable SD / eMMC images** for the friendlyelec cm3588 nas board on **NixOS**, with support for:
-
-
-* Cross-compilation builds on x86_64
-* Vendor kernel + device tree
+Builds a bootable SD card / eMMC image via cross-compilation from an x86_64 machine.
 
 ---
 
-## What this repo builds
+## Prerequisites
 
-The output is a **raw disk image** with:
-
-* GPT partition table
-* Raw bootloader written to fixed sectors
-* ext4 root filesystem containing NixOS
-* extlinux bootloader (no GRUB)
-
-The image is suitable for:
-
-* SD cards
-* eMMC flashing
-* `dd`-style deployment
+- Any Linux machine with [Nix installed](https://nixos.org/download/) and flakes enabled
+- An SD card and a way to write to it
+- Your SSH public key (`~/.ssh/id_ed25519.pub` or similar)
 
 ---
 
-## Supported build modes
+## Quick start
 
+### 1. Clone the repo
 
-### 1. Cross build (x86_64 → aarch64)
+```sh
+git clone git@github.com:YayaADev/nixos-friendlyelec-cm3588.git
+cd nixos-friendlyelec-cm3588
+```
 
-Use this on typical development machines (x86_64 laptops / servers).
+### 2. Edit `configuration.nix`
+
+Open `configuration.nix` and make two changes:
+
+**Add your SSH public key** (required — password auth is disabled):
+
+```nix
+sshKeys = [
+  "ssh-ed25519 AAAA... you@yourhost"
+];
+```
+
+**Optionally change the username** (defaults to `nixos`):
+
+```nix
+username = "nixos"; # change to whatever you like
+```
+
+> The build will fail if `sshKeys` is left empty — this is intentional to prevent
+> you from being locked out of the device.
+
+### 3. Update flake inputs
+
+```sh
+nix flake update
+```
+
+### 4. Build the image
 
 ```sh
 nix build
 ```
 
+This cross-compiles for `aarch64`. The output image will be at:
 
+```
+result/sd-image/sd-image.img
+```
 
-## Flashing the image
+### 5. Flash to SD card
 
- **This will destroy data on the target device**
+Find your SD card device (e.g. with `lsblk`), then:
 
 ```sh
 sudo dd if=result/sd-image/sd-image.img of=/dev/sdX bs=4M status=progress conv=fsync
 ```
 
-Replace `/dev/sdX` with your SD card or eMMC device.
+Replace `/dev/sdX` with your actual SD card device.
+
+> **This will erase all data on the target device. Double-check the device path.**
+
+---
+
+## Booting
+
+Insert the SD card into your CM3588 NAS and power it on. Once booted, SSH in using the username and key you configured:
+
+```sh
+ssh nixos@<board-ip>
+```
 
 ---
 
@@ -56,38 +90,29 @@ Replace `/dev/sdX` with your SD card or eMMC device.
 
 ```
 .
-├── flake.nix                 # Flake outputs (native + cross builds)
+├── configuration.nix         # Start here — username & SSH keys
+├── flake.nix                 # Flake outputs
 ├── hosts/
-│   └── cm3588-nas.nix        # Main NixOS host configuration
+│   └── cm3588-nas.nix        # Host-level NixOS configuration
 ├── modules/
-│   └── sd-image.nix          # Custom Mic92-style GPT image logic
-├── pkgs/
-│   ├── kernel/               # Vendor kernel packaging
-│   ├── u-boot/               # Prebuilt U-Boot blobs
-│   └── firmware/             # FriendlyElec + Mali firmware
-└── README.md
+│   └── sd-image.nix          # GPT image logic
+└── pkgs/
+    ├── kernel/               # Vendor RK3588 kernel
+    ├── u-boot/               # Prebuilt U-Boot blobs
+    └── firmware/             # FriendlyElec + Mali firmware
 ```
-
----
-
-## Bootloader & kernel
-
-* **Bootloader**: U-Boot (FriendlyElec-compatible)
-* **Kernel**: Vendor RK3588 kernel
-* **DTB**: `rockchip/rk3588-nanopi6-rev01.dtb`
-* **Boot method**: extlinux
 
 ---
 
 ## Notes
 
-* GRUB is intentionally disabled
-* EFI is not used
-* This repo targets RK3588 specifically
+- Bootloader: [`ubootCM3588NAS`](https://search.nixos.org/packages?channel=25.11&query=cm3588&show=ubootCM3588NAS) from nixpkgs
+- Kernel: Vendor RK3588 kernel with device tree `rk3588-nanopi6-rev09.dtb`
+- Boot method: extlinux (no GRUB, no EFI)
+- The image works for both SD cards and eMMC flashing
 
 ---
 
-## Status
+## License
 
-This project is functional but still evolving.
-
+MIT
