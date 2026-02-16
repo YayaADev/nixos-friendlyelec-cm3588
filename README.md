@@ -1,118 +1,167 @@
 # nixos-friendlyelec-cm3588
 
-NixOS image builder for the **FriendlyElec CM3588 NAS (RK3588)**.
+NixOS image builder for the FriendlyElec CM3588 board.
 
-Builds a bootable SD card / eMMC image via cross-compilation from an x86_64 machine.
+Builds a bootable SD / eMMC image via cross-compilation from x86_64, with full hardware support including:
 
----
+- FriendlyElec vendor kernel 6.1.141 (latest as of writing)
+- Hardware video transcoding (RKMPP)
+- NPU acceleration RKNN v0.9.8 (latest as of writing)
+- RGA 2D acceleration
+- Mali G610 GPU support
+- 4x NVMe PCIe Gen3, 2.5GbE, eMMC, HDMI
 
-## Prerequisites
+## Quick Start
 
-- Any Linux machine with [Nix installed](https://nixos.org/download/) and flakes enabled
-- An SD card and a way to write to it
-- Your SSH public key (`~/.ssh/id_ed25519.pub` or similar)
+### 1. Clone and configure
 
----
-
-## Quick start
-
-### 1. Clone the repo
-
-```sh
-git clone git@github.com:YayaADev/nixos-friendlyelec-cm3588.git
+```bash
+git clone https://github.com/YayaADev/nixos-friendlyelec-cm3588
 cd nixos-friendlyelec-cm3588
 ```
 
-### 2. Edit `configuration.nix`
+Before building, open `configuration.nix` and make these changes:
 
-Open `configuration.nix` and make two changes:
-
-**Add your SSH public key** (required — password auth is disabled):
-
+**Required — add your SSH public key** (the build will fail without this):
 ```nix
 sshKeys = [
-  "ssh-ed25519 AAAA... you@yourhost"
+  "ssh-ed25519 AAAA... you@host"
 ];
 ```
 
-**Optionally change the username** (defaults to `nixos`):
+**Optional:**
+- Change the username (default: `nixos`)
+- Add or remove system packages under `environment.systemPackages`
 
-```nix
-username = "nixos"; # change to whatever you like
-```
+### 2. Build
 
-> The build will fail if `sshKeys` is left empty — this is intentional to prevent
-> you from being locked out of the device.
-
-### 3. Update flake inputs
-
-```sh
-nix flake update
-```
-
-### 4. Build the image
-
-```sh
+```bash
 nix build
 ```
 
-This cross-compiles for `aarch64`. The output image will be at:
+Cross-compiles on x86_64 → aarch64. Output: `./result/sd-image/friendlyelec-cm3588-sd-image.img`
 
-```
-result/sd-image/sd-image.img
-```
+> If you have [direnv](https://direnv.net) installed, `direnv allow` will auto-load the Nix dev shell. It is not required — `nix build` works without it.
 
-### 5. Flash to SD card
+### 3. Flash to SD card
 
-Find your SD card device (e.g. with `lsblk`), then:
+> **Warning:** This will destroy all data on the target device.
 
-```sh
-sudo dd if=result/sd-image/sd-image.img of=/dev/sdX bs=4M status=progress conv=fsync
+```bash
+sudo dd if=result/sd-image/friendlyelec-cm3588-sd-image.img of=/dev/sdX bs=4M status=progress conv=fsync
 ```
 
-Replace `/dev/sdX` with your actual SD card device.
+Replace `/dev/sdX` with your SD card (check with `lsblk`). Insert into the CM3588 and power on.
 
-> **This will erase all data on the target device. Double-check the device path.**
+### SSH in
 
----
+Password authentication is disabled. Log in with your SSH key:
 
-## Booting
-
-Insert the SD card into your CM3588 NAS and power it on. Once booted, SSH in using the username and key you configured:
-
-```sh
+```bash
 ssh nixos@<board-ip>
 ```
 
+Replace `nixos` with whatever username you set in `configuration.nix`.
+
 ---
 
-## Repository layout
+## Flash to eMMC
+
+Boot from the SD card first, then copy to eMMC from within the board:
+
+```bash
+# Identify devices — SD is usually mmcblk1, eMMC is mmcblk0
+lsblk
+
+# Copy SD image to eMMC
+sudo dd if=/dev/mmcblk1 of=/dev/mmcblk0 bs=16M status=progress conv=fsync
+
+# Resize the root partition to fill the eMMC
+sudo e2fsck -f /dev/mmcblk0p3
+sudo resize2fs /dev/mmcblk0p3
+
+# Power off, remove SD card, power back on
+sudo poweroff
+```
+
+
+---
+
+## Repository Layout
 
 ```
 .
-├── configuration.nix         # Start here — username & SSH keys
-├── flake.nix                 # Flake outputs
+├── flake.nix                    # Flake outputs, cross-compilation setup
+├── configuration.nix            # Edit this: SSH keys, username, packages
 ├── hosts/
-│   └── cm3588-nas.nix        # Host-level NixOS configuration
+│   └── cm3588-nas.nix           # Host entry point, imports all modules
 ├── modules/
-│   └── sd-image.nix          # GPT image logic
+│   ├── hardware/
+│   │   ├── board.nix            # DTB, firmware, boot params
+│   │   └── kernel.nix           # Loads vendor kernel
+│   └── image/
+│       └── sd-image.nix         # GPT image builder
 └── pkgs/
-    ├── kernel/               # Vendor RK3588 kernel
-    ├── u-boot/               # Prebuilt U-Boot blobs
-    └── firmware/             # FriendlyElec + Mali firmware
+    ├── kernel/vendor.nix        # FriendlyArm kernel 6.1.141
+    ├── u-boot/                  # Prebuilt bootloader blobs
+    └── firmware/                # FriendlyElec + Mali firmware
 ```
 
 ---
 
-## Notes
+## Use as a Flake Module
 
-- Bootloader: [`ubootCM3588NAS`](https://search.nixos.org/packages?channel=25.11&query=cm3588&show=ubootCM3588NAS) from nixpkgs
-- Kernel: Vendor RK3588 kernel with device tree `rk3588-nanopi6-rev09.dtb`
-- Boot method: extlinux (no GRUB, no EFI)
-- The image works for both SD cards and eMMC flashing
+To use the board support in your own NixOS config:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    friendlyelecCM3588 = {
+      url = "github:YayaADev/nixos-friendlyelec-cm3588";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = { self, nixpkgs, friendlyelecCM3588 }: {
+    nixosConfigurations.my-cm3588 = nixpkgs.lib.nixosSystem {
+      system = "aarch64-linux";
+      modules = [
+        friendlyelecCM3588.nixosModules.cm3588  # board + kernel support
+        ({ ... }: {
+          networking.hostName = "cm3588-nas";
+          # your config here
+        })
+      ];
+    };
+  };
+}
+```
 
 ---
 
+## Comparison
+
+| Project | Kernel | CM3588 Support | Status |
+|---|---|---|---|
+| **This repo** | FriendlyElec BSP 6.1 | ✅ Native | ✅ Active |
+| [nixos-aarch64-images](https://github.com/Mic92/nixos-aarch64-images) | Mainline | ⚠️ No built-in CM3588 support | ⚠️ Missing HW acceleration |
+| [ryan4yin/nixos-rk3588](https://github.com/ryan4yin/nixos-rk3588) | Armbian fork | ⚠️ Generic RK3588 | ❌ Archived |
+| [gnull/nixos-rk3588](https://github.com/gnull/nixos-rk3588) | Armbian fork | ⚠️ Generic RK3588 | ⚠️ Doesnt support this board |
+
+---
+
+## Tested Hardware
+
+Tested and actively used on a FriendlyElec CM3588+ NAS Kit (32GB RAM, 64GB eMMC).
+
+## Acknowledgments
+
+- [gnull/nixos-rk3588](https://github.com/gnull/nixos-rk3588) — build system foundation
+- [ryan4yin/nixos-rk3588](https://github.com/ryan4yin/nixos-rk3588) — original RK3588 NixOS work
+- [Mic92/nixos-aarch64-images](https://github.com/Mic92/nixos-aarch64-images) — image building approach
+- FriendlyElec — hardware and BSP kernel
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE)
