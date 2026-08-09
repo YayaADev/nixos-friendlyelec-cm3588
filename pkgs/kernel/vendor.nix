@@ -22,6 +22,29 @@ buildLinux (args
       DEBUG_INFO_BTF = lib.mkForce no;
       DEBUG_INFO_BTF_MODULES = lib.mkForce no;
 
+      # Modules must be decompressed in userspace, not by the kernel.
+      # This 6.1 vendor tree's scripts/Makefile.modinst predates the
+      # `--check=crc32` fix, so it xz's modules with xz's default CRC64
+      # check — but the kernel's own lib/xz decoder only verifies CRC32
+      # and rejects the stream with XZ_OPTIONS_ERROR (status 6). With
+      # MODULE_DECOMPRESS=y every single module load fails, including
+      # nls_utf8, which makes the vfat /boot mount fail and drops the
+      # machine to an emergency shell. kmod links liblzma and handles
+      # CRC64 fine, so keep the work on its side.
+      # (nixpkgs sets this via `MODULE_DECOMPRESS = whenAtLeast "6.0" yes`.)
+      MODULE_DECOMPRESS = lib.mkForce no;
+
+      # Keep the two modules the machine cannot be recovered without in
+      # the kernel image itself, so that a module-loading regression can
+      # never take the box off the network or block the /boot mount:
+      #   NLS_UTF8 - vfat /boot uses CONFIG_FAT_DEFAULT_IOCHARSET="utf8";
+      #              without it local-fs.target fails and boot drops to
+      #              an emergency shell.
+      #   R8169    - the onboard NIC. PHYLIB/REALTEK_PHY are already
+      #              builtin, so this pulls in no new dependencies.
+      NLS_UTF8 = lib.mkForce yes;
+      R8169 = lib.mkForce yes;
+
       # GPU/Mali
       MALI_VALHALL = module;
       MALI_CSF_SUPPORT = yes;
